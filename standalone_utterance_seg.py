@@ -6,11 +6,18 @@ Single-file version that combines all functionality.
 Works on CPU only, no GPU required.
 
 Usage:
-    # With LLM (requires API key)
+    # With Anthropic API (requires API key)
     python standalone_utterance_seg.py \\
         --input_asr_json data/asr.json \\
         --output_json output/utterances.json \\
         --anthropic_api_key sk-ant-...
+
+    # With local GGUF model (CPU-only, no API key)
+    python standalone_utterance_seg.py \\
+        --input_asr_json data/asr.json \\
+        --output_json output/utterances.json \\
+        --llm_backend local \\
+        --local_model_path models/Phi-3-mini-4k-instruct-q4.gguf
 
     # Without LLM (faster, no API key needed)
     python standalone_utterance_seg.py \\
@@ -19,7 +26,8 @@ Usage:
         --no_llm
 
 Dependencies:
-    pip install pydantic anthropic
+    pip install pydantic anthropic        # anthropic only for API mode
+    pip install llama-cpp-python          # only for local model mode
 
 Author: Semantic Utterance Segmentation Pipeline
 Version: 1.0.0
@@ -249,7 +257,8 @@ def build_boundary_prompt(
     left_text: str,
     right_text: str,
     examples: List[Dict[str, Any]],
-    config: Optional[Dict[str, Any]] = None
+    config: Optional[Dict[str, Any]] = None,
+    use_local: bool = False
 ) -> str:
     """Build LLM prompt for boundary classification."""
     if config is None:
@@ -257,7 +266,7 @@ def build_boundary_prompt(
 
     min_len = config.get('min_utterance_length', 40)
     max_len = config.get('max_utterance_length', 80)
-    num_examples = config.get('num_few_shot_examples', 3)
+    num_examples = config.get('num_few_shot_examples', 3 if not use_local else 2)
 
     selected_examples = examples[:num_examples] if examples else []
 
@@ -339,6 +348,121 @@ class LLMBoundaryClassifier:
             raise
         except Exception as e:
             raise RuntimeError(f"LLM API call failed: {e}")
+
+
+class LocalLLMBoundaryClassifier:
+    """Client for querying local GGUF models to classify utterance boundaries."""
+
+    def __init__(
+        self,
+        model_path: str,
+        n_ctx: int = 2048,
+        n_threads: Optional[int] = None,
+        verbose: bool = False
+    ):
+        """Initialize the local LLM client."""
+        model_path = Path(model_path)
+        if not model_path.exists():
+            raise FileNotFoundError(f"Model file not found: {model_path}")
+
+        try:
+            from llama_cpp import Llama
+        except ImportError:
+            print("Error: llama-cpp-python required for local models.", file=sys.stderr)
+            print("Install with: pip install llama-cpp-python", file=sys.stderr)
+            sys.exit(1)
+
+        self.model_path = str(model_path)
+        self.n_ctx = n_ctx
+        self.n_threads = n_threads or os.cpu_count() or 4
+
+        print(f"Loading local model from {self.model_path}...")
+        print(f"Using {self.n_threads} CPU threads, context size: {n_ctx}")
+
+        self.llm = Llama(
+            model_path=self.model_path,
+            n_ctx=n_ctx,
+            n_threads=self.n_threads,
+            verbose=verbose
+        )
+
+        print("Local model loaded successfully!")
+
+    def query_boundary(self, prompt: str, max_tokens: int = 200) -> Dict[str, Any]:
+        """Query local LLM to determine if a boundary should be placed."""
+        try:
+            # Generate response
+            response = self.llm(
+                prompt,
+                max_tokens=max_tokens,
+                temperature=0.1,  # Lower temperature for more consistent JSON
+                stop=["}", "\n\n"],  # Stop at end of JSON or double newline
+                echo=False
+            )
+
+            # Extract text from response
+            response_text = response['choices'][0]['text'].strip()
+
+            # Try to extract JSON if wrapped in markdown or extra text
+            import re
+            json_match = re.search(r'\{[^}]+\}', response_text, re.DOTALL)
+            if json_match:
+                response_text = json_match.group(0)
+
+            # Parse JSON
+            result = json.loads(response_text)
+
+            # Validate and provide defaults for missing fields
+            required_fields = {'break_here', 'left_is_complete', 'right_is_new_or_complete', 'reason'}
+            for field in required_fields:
+                if field not in result:
+                    # Provide sensible defaults for missing fields
+                    if field == 'reason':
+                        result[field] = "N/A"
+                    else:
+                        result[field] = False
+
+            return result
+
+        except json.JSONDecodeError as e:
+            # Fallback: try to extract boolean from text
+            response_lower = response_text.lower()
+            break_here = 'true' in response_lower or 'break' in response_lower
+
+            return {
+                'break_here': break_here,
+                'left_is_complete': break_here,
+                'right_is_new_or_complete': break_here,
+                'reason': f"Parse error, inferred from text: {response_text[:50]}"
+            }
+
+        except Exception as e:
+            raise RuntimeError(f"Local LLM generation failed: {e}")
+
+
+def create_classifier(
+    backend: str = "anthropic",
+    anthropic_api_key: Optional[str] = None,
+    anthropic_model: str = "claude-3-5-sonnet-20241022",
+    local_model_path: Optional[str] = None,
+    n_ctx: int = 2048,
+    n_threads: Optional[int] = None,
+    verbose: bool = False
+):
+    """Factory function to create appropriate boundary classifier."""
+    if backend == "anthropic":
+        return LLMBoundaryClassifier(api_key=anthropic_api_key, model=anthropic_model)
+    elif backend == "local":
+        if not local_model_path:
+            raise ValueError("local_model_path required when backend='local'")
+        return LocalLLMBoundaryClassifier(
+            model_path=local_model_path,
+            n_ctx=n_ctx,
+            n_threads=n_threads,
+            verbose=verbose
+        )
+    else:
+        raise ValueError(f"Invalid backend: {backend}. Must be 'anthropic' or 'local'")
 
 
 # ============================================================================
@@ -595,21 +719,31 @@ def main(argv: Optional[List[str]] = None):
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Example usage:
-  # With LLM (requires API key)
+  # With Anthropic API:
   python standalone_utterance_seg.py \\
     --input_asr_json data/session_001.json \\
     --few_shot_examples examples/boundaries.json \\
     --output_json output/utterances.json \\
     --anthropic_api_key sk-ant-...
 
-  # Without LLM (faster, no API key needed)
+  # With local GGUF model (CPU-only):
+  python standalone_utterance_seg.py \\
+    --input_asr_json data/session_001.json \\
+    --few_shot_examples examples/boundaries.json \\
+    --output_json output/utterances.json \\
+    --llm_backend local \\
+    --local_model_path models/Phi-3-mini-4k-instruct-q4.gguf \\
+    --n_threads 8
+
+  # Without LLM (faster, no API key needed):
   python standalone_utterance_seg.py \\
     --input_asr_json data/session_001.json \\
     --output_json output/utterances.json \\
     --no_llm
 
 Dependencies:
-  pip install pydantic anthropic
+  pip install pydantic anthropic  # anthropic only for API mode
+  pip install llama-cpp-python    # only for local model mode
 """
     )
 
@@ -618,6 +752,11 @@ Dependencies:
     parser.add_argument("--few_shot_examples", help="Path to few-shot examples JSON file")
     parser.add_argument("--anthropic_api_key", help="Anthropic API key (or set ANTHROPIC_API_KEY env var)")
     parser.add_argument("--no_llm", action="store_true", help="Skip LLM and use simple span-based segmentation")
+    parser.add_argument("--llm_backend", choices=["anthropic", "local"], default="anthropic", help="LLM backend: 'anthropic' (API) or 'local' (GGUF)")
+    parser.add_argument("--local_model_path", help="Path to local GGUF model file (required if --llm_backend=local)")
+    parser.add_argument("--n_ctx", type=int, default=2048, help="Context size for local model (default: 2048)")
+    parser.add_argument("--n_threads", type=int, help="CPU threads for local model (default: auto-detect)")
+    parser.add_argument("--verbose", action="store_true", help="Enable verbose output from local model")
     parser.add_argument("--turn_break_threshold", type=float, default=1.5, help="Pause threshold for turn breaks (default: 1.5s)")
     parser.add_argument("--min_utterance_length", type=int, default=40, help="Min utterance length in words (default: 40)")
     parser.add_argument("--max_utterance_length", type=int, default=80, help="Max utterance length in words (default: 80)")
@@ -690,13 +829,29 @@ Dependencies:
             print("Building utterances (simple mode, no LLM)...")
         utterances = build_utterances_simple(turns, spans, words)
     else:
-        if not args.quiet:
-            print("Building utterances with LLM boundary detection...")
+        # Validate LLM backend configuration
+        if args.llm_backend == "local" and not args.local_model_path:
+            print("Error: --local_model_path required when --llm_backend=local", file=sys.stderr)
+            return 1
 
+        if not args.quiet:
+            if args.llm_backend == "local":
+                print(f"Building utterances with local LLM ({args.local_model_path})...")
+            else:
+                print("Building utterances with LLM boundary detection (Anthropic API)...")
+
+        # Initialize LLM client using factory
         try:
-            llm_client = LLMBoundaryClassifier(api_key=args.anthropic_api_key)
-        except ValueError as e:
-            print(f"Error: {e}", file=sys.stderr)
+            llm_client = create_classifier(
+                backend=args.llm_backend,
+                anthropic_api_key=args.anthropic_api_key,
+                local_model_path=args.local_model_path,
+                n_ctx=args.n_ctx,
+                n_threads=args.n_threads,
+                verbose=args.verbose
+            )
+        except (ValueError, ImportError, FileNotFoundError) as e:
+            print(f"Error initializing LLM: {e}", file=sys.stderr)
             return 1
 
         try:

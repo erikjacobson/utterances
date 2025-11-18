@@ -24,11 +24,45 @@ python standalone_utterance_seg.py \
 **Advantages:**
 - ✅ No conda environment setup required
 - ✅ No package installation
-- ✅ Works with system Python + 2 pip packages
-- ✅ 730 lines in a single file
+- ✅ Works with system Python + minimal pip packages
+- ✅ 850+ lines in a single file
 - ✅ Same functionality as full package
 
 You can also use the standalone script in SLURM jobs - just replace the `python -m utterance_segmentation.cli` commands in the example scripts below with `python standalone_utterance_seg.py`.
+
+## Local LLM Option (No API Key Required)
+
+For HPC environments with network restrictions or to avoid API costs, use a **local GGUF model**:
+
+```bash
+# 1. Download a local model (one-time setup)
+python download_local_model.py --output_dir models
+
+# 2. Install llama-cpp-python
+pip install --user llama-cpp-python
+
+# 3. Run with local model (no API key needed!)
+python standalone_utterance_seg.py \
+  --input_asr_json /path/to/your/asr.json \
+  --output_json output/utterances.json \
+  --llm_backend local \
+  --local_model_path models/Phi-3-mini-4k-instruct-Q4_K_M.gguf \
+  --n_threads 16
+```
+
+**Local Model Benefits for HPC:**
+- ✅ No internet required after model download
+- ✅ No API costs
+- ✅ Works on compute nodes without external network access
+- ✅ CPU-only, works on any node
+- ✅ Adjust `--n_threads` based on your SLURM allocation
+
+**Recommended Models:**
+- **Phi-3 Mini Q4_K_M** (~2.4GB): Best quality/speed balance
+- **Phi-3 Mini Q2_K** (~1.4GB): Faster, lower quality
+- **Llama 3.2 3B Q4_K_M** (~1.9GB): Alternative option
+
+Download script automatically fetches from HuggingFace. Run once and reuse the model file for all jobs.
 
 ## Quick Start (Full Package)
 
@@ -87,32 +121,42 @@ conda activate utterance-seg
 pip install -e .
 ```
 
-### 2. Configure API Access (LLM Mode Only)
+### 2. Configure LLM Access
 
-For LLM-based semantic segmentation, you need an Anthropic API key.
+You have three options for LLM-based semantic segmentation:
 
-**Option 1: Environment Variable (Recommended)**
+**Option A: Anthropic API (Requires API Key)**
 
 Add to your `~/.bashrc`:
 ```bash
 export ANTHROPIC_API_KEY="sk-ant-your-key-here"
 ```
 
-**Option 2: SLURM Script**
-
-Uncomment and edit the line in the SLURM script:
+Or pass directly:
 ```bash
-export ANTHROPIC_API_KEY="your-key-here"
+python -m utterance_segmentation.cli --anthropic_api_key "your-key-here" ...
 ```
 
-**Option 3: Command-line Argument**
+**Option B: Local GGUF Model (No API Key)**
 
-Pass directly to the CLI:
+Download model once (do this from a login node with internet):
+```bash
+python download_local_model.py --output_dir models
+pip install --user llama-cpp-python
+```
+
+Then use in your scripts:
 ```bash
 python -m utterance_segmentation.cli \
-  --anthropic_api_key "your-key-here" \
+  --llm_backend local \
+  --local_model_path models/Phi-3-mini-4k-instruct-Q4_K_M.gguf \
+  --n_threads 16 \
   ...
 ```
+
+**Option C: No LLM (Fastest)**
+
+Use `--no_llm` flag for simple rule-based segmentation.
 
 ## Usage Modes
 
@@ -160,6 +204,22 @@ watch -n 10 'squeue -u $USER'
 ```bash
 #SBATCH --array=1-50%10
 ```
+
+**Note on Local LLM for Batch Processing:**
+
+To use local models in batch jobs, modify your SLURM scripts to include:
+```bash
+python -m utterance_segmentation.cli \
+  --llm_backend local \
+  --local_model_path /path/to/models/Phi-3-mini-4k-instruct-Q4_K_M.gguf \
+  --n_threads $SLURM_CPUS_PER_TASK \
+  ...
+```
+
+**Resource Requirements for Local LLM:**
+- Time: 2-4 hours per file (slower than API but no network required)
+- Memory: 8-16GB (model size + working memory)
+- CPUs: 8-16 recommended (adjust with --n_threads)
 
 ### Mode 3: Simple Mode (no LLM)
 

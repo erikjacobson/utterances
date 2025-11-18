@@ -55,7 +55,7 @@ The standalone script is available in both the root directory and `hpc/` directo
 
 ## Usage (Installed Package)
 
-### Basic Usage (with LLM)
+### Using Anthropic API (Highest Quality)
 
 ```bash
 export ANTHROPIC_API_KEY=sk-ant-...
@@ -65,6 +65,40 @@ python -m utterance_segmentation.cli \
   --few_shot_examples path/to/examples.json \
   --output_json path/to/output.json
 ```
+
+### Using Local GGUF Model (CPU-Only, No API Key)
+
+First, download a recommended model:
+
+```bash
+# Download default model (Phi-3 Mini Q4_K_M, ~2.4GB)
+python download_local_model.py
+
+# Or download smaller/faster model
+python download_local_model.py --model phi3-q2
+
+# List available models
+python download_local_model.py --list
+```
+
+Then run with local model:
+
+```bash
+python -m utterance_segmentation.cli \
+  --input_asr_json path/to/asr.json \
+  --few_shot_examples path/to/examples.json \
+  --output_json path/to/output.json \
+  --llm_backend local \
+  --local_model_path models/Phi-3-mini-4k-instruct-Q4_K_M.gguf \
+  --n_threads 8
+```
+
+**Local Model Notes:**
+- Requires `llama-cpp-python`: `pip install llama-cpp-python`
+- CPU-only, no GPU needed
+- Recommended models: Phi-3 Mini (2.4GB), Llama 3.2 3B (1.9GB)
+- Use `--n_threads` to control CPU usage (default: auto-detect)
+- Quality is slightly lower than API but no cost and works offline
 
 ### Simple Mode (without LLM)
 
@@ -86,16 +120,28 @@ python -m utterance_segmentation.cli \
 
 ### CLI Options
 
+**Input/Output:**
 - `--input_asr_json`: Path to input ASR JSON (required)
 - `--output_json`: Path to output utterances JSON (required)
 - `--few_shot_examples`: Path to few-shot examples JSON (optional)
+
+**LLM Backend:**
+- `--llm_backend`: LLM backend to use: 'anthropic' or 'local' (default: anthropic)
 - `--anthropic_api_key`: Anthropic API key (or use ANTHROPIC_API_KEY env var)
+- `--local_model_path`: Path to local GGUF model file (required if --llm_backend=local)
+- `--n_ctx`: Context size for local model (default: 2048)
+- `--n_threads`: CPU threads for local model (default: auto-detect)
 - `--no_llm`: Skip LLM and use simple span-based segmentation
+- `--verbose`: Enable verbose output from local model (llama.cpp logs)
+
+**Segmentation Parameters:**
 - `--turn_break_threshold`: Pause threshold for turn breaks in seconds (default: 1.5)
 - `--min_utterance_length`: Minimum target length in words (default: 40)
 - `--max_utterance_length`: Maximum target length in words (default: 80)
 - `--max_boundary_candidates`: Max candidates per span (default: 5)
 - `--num_few_shot_examples`: Number of examples in prompts (default: 3)
+
+**Output:**
 - `--quiet`: Suppress diagnostic output
 
 ## Input Format
@@ -182,14 +228,15 @@ All 96 tests passing!
 ## Project Structure
 
 ```
-standalone_utterance_seg.py  # 🌟 Single-file standalone version (730 lines, CPU-only)
+standalone_utterance_seg.py  # 🌟 Single-file standalone version (850+ lines, CPU-only)
+download_local_model.py      # 🌟 Helper to download GGUF models
 
 src/utterance_segmentation/  # Full package version
   ├── models.py              # Core data structures (Word, Turn, Utterance, etc.)
   ├── io.py                  # I/O helpers for ASR JSON
   ├── turns.py               # Turn construction from speaker/pauses
   ├── spans.py               # Candidate span generation (40-80 words)
-  ├── llm_boundaries.py      # LLM boundary classification (Claude API)
+  ├── llm_boundaries.py      # LLM boundary classification (API + local GGUF)
   ├── utterances.py          # Final utterance construction
   └── cli.py                 # Command-line interface
 

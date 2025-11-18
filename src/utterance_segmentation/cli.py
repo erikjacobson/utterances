@@ -11,7 +11,7 @@ from .models import UtteranceDocument
 from .turns import build_turns
 from .spans import build_candidate_spans_for_all_turns
 from .utterances import build_utterances, build_utterances_simple
-from .llm_boundaries import LLMBoundaryClassifier
+from .llm_boundaries import create_classifier
 
 
 def print_diagnostics(words, turns, spans, utterances, elapsed_time):
@@ -58,18 +58,27 @@ def main(argv: Optional[list] = None):
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Example usage:
+  # Using Anthropic API:
   python -m utterance_segmentation.cli \\
     --input_asr_json data/session_001.json \\
     --few_shot_examples examples/boundaries.json \\
     --output_json output/session_001_utterances.json \\
     --anthropic_api_key sk-ant-...
 
-  # Or set ANTHROPIC_API_KEY environment variable:
-  export ANTHROPIC_API_KEY=sk-ant-...
+  # Using local GGUF model (CPU-only):
   python -m utterance_segmentation.cli \\
     --input_asr_json data/session_001.json \\
     --few_shot_examples examples/boundaries.json \\
-    --output_json output/session_001_utterances.json
+    --output_json output/session_001_utterances.json \\
+    --llm_backend local \\
+    --local_model_path models/Phi-3-mini-4k-instruct-q4.gguf \\
+    --n_threads 8
+
+  # Simple mode (no LLM):
+  python -m utterance_segmentation.cli \\
+    --input_asr_json data/session_001.json \\
+    --output_json output/session_001_utterances.json \\
+    --no_llm
 """
     )
 
@@ -98,6 +107,32 @@ Example usage:
         "--no_llm",
         action="store_true",
         help="Skip LLM and use simple span-based segmentation"
+    )
+    parser.add_argument(
+        "--llm_backend",
+        choices=["anthropic", "local"],
+        default="anthropic",
+        help="LLM backend to use: 'anthropic' (API) or 'local' (GGUF model)"
+    )
+    parser.add_argument(
+        "--local_model_path",
+        help="Path to local GGUF model file (required if --llm_backend=local)"
+    )
+    parser.add_argument(
+        "--n_ctx",
+        type=int,
+        default=2048,
+        help="Context size for local model (default: 2048)"
+    )
+    parser.add_argument(
+        "--n_threads",
+        type=int,
+        help="CPU threads for local model (default: auto-detect)"
+    )
+    parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Enable verbose output from local model (llama.cpp logs)"
     )
 
     # Configuration parameters
@@ -216,14 +251,29 @@ Example usage:
             print("Building utterances (simple mode, no LLM)...")
         utterances = build_utterances_simple(turns, spans, words)
     else:
-        if not args.quiet:
-            print("Building utterances with LLM boundary detection...")
+        # Validate LLM backend configuration
+        if args.llm_backend == "local" and not args.local_model_path:
+            print("Error: --local_model_path required when --llm_backend=local", file=sys.stderr)
+            return 1
 
-        # Initialize LLM client
+        if not args.quiet:
+            if args.llm_backend == "local":
+                print(f"Building utterances with local LLM ({args.local_model_path})...")
+            else:
+                print("Building utterances with LLM boundary detection (Anthropic API)...")
+
+        # Initialize LLM client using factory
         try:
-            llm_client = LLMBoundaryClassifier(api_key=args.anthropic_api_key)
-        except ValueError as e:
-            print(f"Error: {e}", file=sys.stderr)
+            llm_client = create_classifier(
+                backend=args.llm_backend,
+                anthropic_api_key=args.anthropic_api_key,
+                local_model_path=args.local_model_path,
+                n_ctx=args.n_ctx,
+                n_threads=args.n_threads,
+                verbose=args.verbose
+            )
+        except (ValueError, ImportError, FileNotFoundError) as e:
+            print(f"Error initializing LLM: {e}", file=sys.stderr)
             return 1
 
         try:

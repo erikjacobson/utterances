@@ -1,0 +1,34 @@
+{
+  "examples": [
+    {
+      "left_text": "I think we should start with some easier problems and see how you do",
+      "right_text": "then we can move on to the challenge set if you feel ready",
+      "break_here": false,
+      "explanation": "The second clause is a natural continuation of the plan, same cohesive idea about progression."
+    },
+    {
+      "left_text": "So what did you notice about the pattern in this table",
+      "right_text": "take a moment and look at the differences between each row",
+      "break_here": true,
+      "explanation": "First is a question soliciting observation, second is a new directive to examine details. Good place to split."
+    },
+    {
+      "left_text": "That's exactly right you got it",
+      "right_text": "now let's see if you can apply that same reasoning to the next problem",
+      "break_here": true,
+      "explanation": "First utterance is complete positive feedback. Second starts a new task-oriented directive."
+    },
+    {
+      "left_text": "The key thing to remember here is that the order matters",
+      "right_text": "because when you swap the elements the result changes completely",
+      "break_here": false,
+      "explanation": "Second clause directly explains why the first statement is true, continuation of the same instructional point."
+    },
+    {
+      "left_text": "Hmm I'm not sure",
+      "right_text": "could you give me a hint about where to start",
+      "break_here": false,
+      "explanation": "Brief expression of uncertainty followed immediately by request for help, both part of the same turn-taking moment."
+    }
+  ]
+}

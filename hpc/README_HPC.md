@@ -221,7 +221,74 @@ python -m utterance_segmentation.cli \
 - Memory: 8-16GB (model size + working memory)
 - CPUs: 8-16 recommended (adjust with --n_threads)
 
-### Mode 3: Simple Mode (no LLM)
+### Mode 3: Local LLM Single File
+
+Best for: High-quality semantic segmentation without API costs or network access
+
+**Prerequisites:**
+```bash
+# One-time setup (do this from login node with internet)
+python download_local_model.py --output_dir models
+pip install --user llama-cpp-python
+```
+
+**Usage:**
+```bash
+# Edit run_local_llm.sh with your paths
+nano run_local_llm.sh
+
+# Submit job
+sbatch run_local_llm.sh
+
+# Monitor job
+squeue -u $USER
+```
+
+**Resource Requirements:**
+- Time: 2-4 hours per file
+- Memory: 16GB (model + processing)
+- CPUs: 16 (adjustable with --n_threads)
+
+### Mode 4: Local LLM Batch Processing
+
+Best for: Processing many files with no API costs, no network required
+
+**Prerequisites:**
+```bash
+# One-time setup (same as Mode 3)
+python download_local_model.py --output_dir models
+pip install --user llama-cpp-python
+
+# Create file list
+ls /path/to/asr/files/*.json > file_list.txt
+```
+
+**Usage:**
+```bash
+# Edit array size in run_local_llm_batch.sh
+# --array=1-N%M where N=total files, M=max simultaneous jobs
+nano run_local_llm_batch.sh
+
+# Submit batch job
+sbatch run_local_llm_batch.sh
+
+# Monitor progress
+squeue -u $USER
+watch -n 10 'squeue -u $USER'
+```
+
+**Example for 100 files, 10 at a time:**
+```bash
+#SBATCH --array=1-100%10
+```
+
+**Resource Requirements:**
+- Time: 2-4 hours per file
+- Memory: 16GB per job
+- CPUs: 16 per job
+- No API rate limits!
+
+### Mode 5: Simple Mode (no LLM)
 
 Best for: Fast processing without semantic analysis, no API key needed
 
@@ -247,10 +314,16 @@ Recommended project organization:
 ├── hpc/                           # HPC scripts (this directory)
 │   ├── environment.yml
 │   ├── setup_hpc.sh
-│   ├── run_slurm.sh
-│   ├── run_slurm_batch.sh
-│   ├── run_no_llm.sh
+│   ├── run_slurm.sh              # Single file with Anthropic API
+│   ├── run_slurm_batch.sh        # Batch with Anthropic API
+│   ├── run_local_llm.sh          # Single file with local model
+│   ├── run_local_llm_batch.sh    # Batch with local model
+│   ├── run_no_llm.sh             # Simple mode (no LLM)
+│   ├── standalone_utterance_seg.py
 │   └── README_HPC.md
+├── download_local_model.py        # Model downloader script
+├── models/                        # Local GGUF models (after download)
+│   └── Phi-3-mini-4k-instruct-Q4_K_M.gguf
 ├── examples/                      # Sample data
 │   ├── sample_asr.json
 │   └── few_shot_boundaries.json
@@ -260,7 +333,9 @@ Recommended project organization:
 │   └── *.json
 ├── logs/                          # SLURM job logs
 │   ├── utterance_seg_*.out
-│   └── utterance_seg_*.err
+│   ├── utterance_seg_*.err
+│   ├── utterance_seg_local_*.out
+│   └── utterance_seg_local_*.err
 └── file_list.txt                  # File list for batch processing
 ```
 

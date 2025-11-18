@@ -11,13 +11,24 @@ This pipeline processes word-level ASR + diarization JSON and produces semantica
 
 ## Installation
 
+**Basic installation (Anthropic API only):**
 ```bash
 pip install -e .
 ```
 
-For development:
+**With local LLM support:**
+```bash
+pip install -e ".[local]"
+```
+
+**For development:**
 ```bash
 pip install -e ".[dev]"
+```
+
+**All features (API + local + dev):**
+```bash
+pip install -e ".[local,dev]"
 ```
 
 ## Standalone Single-File Version (CPU Only)
@@ -109,6 +120,27 @@ python -m utterance_segmentation.cli \
   --no_llm
 ```
 
+## LLM Backend Comparison
+
+Choose the right backend for your use case:
+
+| Feature | Anthropic API | Local GGUF | No LLM |
+|---------|---------------|-------------|---------|
+| **Quality** | Highest | Good | Basic |
+| **Speed** | Fast (0.5-2s/query) | Moderate (1-3s/query) | Fastest (<1ms) |
+| **Cost** | ~$0.05-0.10/file | Free | Free |
+| **Internet Required** | Yes | No (after download) | No |
+| **Setup** | API key only | Download model (~2.4GB) | None |
+| **Dependencies** | `anthropic` | `llama-cpp-python` | None |
+| **Hardware** | Any | CPU (8-16 cores recommended) | Any |
+| **Best For** | Production, highest quality | HPC, offline, no API budget | Quick testing, prototyping |
+
+**Recommended Use Cases:**
+- **Production/Research**: Anthropic API - Highest quality, worth the cost for final datasets
+- **HPC/Batch Processing**: Local GGUF - No API costs, works on compute nodes without internet
+- **Development/Testing**: No LLM - Fast iteration, good for debugging pipeline
+- **Budget-Conscious**: Local GGUF - One-time download, unlimited processing
+
 ### Try it with sample data
 
 ```bash
@@ -192,28 +224,47 @@ ASR JSON must follow WhisperX-style format:
 
 For batch processing on HPC systems (Indiana University's Carbonate, Big Red 200, etc.), see **[HPC Documentation](hpc/README_HPC.md)**.
 
-Quick start:
+### Quick Start
+
+**With Anthropic API:**
 ```bash
 # Setup conda environment
 cd hpc
 bash setup_hpc.sh
+export ANTHROPIC_API_KEY=sk-ant-...
 
-# Submit single job
-sbatch run_slurm.sh
-
-# Submit batch processing (multiple files)
-sbatch run_slurm_batch.sh
-
-# Fast processing without LLM
-sbatch run_no_llm.sh
+# Submit single job or batch processing
+sbatch run_slurm.sh              # Single file
+sbatch run_slurm_batch.sh        # Multiple files
 ```
+
+**With Local LLM (No API costs):**
+```bash
+# One-time setup
+python download_local_model.py --output_dir models
+pip install --user llama-cpp-python
+
+# Submit jobs
+sbatch run_local_llm.sh          # Single file
+sbatch run_local_llm_batch.sh    # Multiple files
+```
+
+**Without LLM (Fastest):**
+```bash
+sbatch run_no_llm.sh             # Simple rule-based segmentation
+```
+
+### Available HPC Scripts
 
 The `hpc/` directory includes:
 - `environment.yml` - Conda environment specification
 - `setup_hpc.sh` - Automated setup script
-- `run_slurm.sh` - Single file SLURM job
-- `run_slurm_batch.sh` - Batch processing with job arrays
+- `run_slurm.sh` - Single file with Anthropic API
+- `run_slurm_batch.sh` - Batch with Anthropic API
+- `run_local_llm.sh` - Single file with local GGUF model
+- `run_local_llm_batch.sh` - Batch with local GGUF model
 - `run_no_llm.sh` - Fast processing without LLM
+- `standalone_utterance_seg.py` - Standalone single-file version
 - `README_HPC.md` - Comprehensive HPC usage guide
 
 ## Testing
@@ -249,9 +300,11 @@ hpc/                         # HPC/SLURM batch processing scripts
   ├── standalone_utterance_seg.py  # Standalone script copy
   ├── environment.yml        # Conda environment
   ├── setup_hpc.sh           # Setup script
-  ├── run_slurm.sh           # Single file job
-  ├── run_slurm_batch.sh     # Batch processing
-  ├── run_no_llm.sh          # Fast mode
+  ├── run_slurm.sh           # Single file with Anthropic API
+  ├── run_slurm_batch.sh     # Batch with Anthropic API
+  ├── run_local_llm.sh       # Single file with local model
+  ├── run_local_llm_batch.sh # Batch with local model
+  ├── run_no_llm.sh          # Fast mode (no LLM)
   └── README_HPC.md          # HPC usage guide
 ```
 

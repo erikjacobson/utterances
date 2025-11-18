@@ -2,7 +2,35 @@
 
 This guide covers setup and usage of the semantic utterance segmentation pipeline on Indiana University's High Performance Computing (HPC) systems (Carbonate, Big Red 200, Quartz, etc.).
 
-## Quick Start
+## Standalone Option (Easiest for HPC)
+
+For maximum simplicity on HPC, use the **standalone single-file version** (`standalone_utterance_seg.py`) which requires minimal setup:
+
+```bash
+# 1. Copy standalone script to your HPC directory
+cd /N/u/your-username/Carbonate/projects/utterances/hpc
+
+# 2. Install minimal dependencies
+module load python
+pip install --user pydantic anthropic
+
+# 3. Run directly (no package installation needed!)
+python standalone_utterance_seg.py \
+  --input_asr_json /path/to/your/asr.json \
+  --output_json output/utterances.json \
+  --no_llm
+```
+
+**Advantages:**
+- ✅ No conda environment setup required
+- ✅ No package installation
+- ✅ Works with system Python + 2 pip packages
+- ✅ 730 lines in a single file
+- ✅ Same functionality as full package
+
+You can also use the standalone script in SLURM jobs - just replace the `python -m utterance_segmentation.cli` commands in the example scripts below with `python standalone_utterance_seg.py`.
+
+## Quick Start (Full Package)
 
 ```bash
 # 1. Clone repository and navigate to project

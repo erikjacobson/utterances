@@ -20,7 +20,40 @@ For development:
 pip install -e ".[dev]"
 ```
 
-## Usage
+## Standalone Single-File Version (CPU Only)
+
+For maximum portability and ease of deployment, use the standalone version that requires no installation:
+
+```bash
+# Quick start - just download and run!
+python standalone_utterance_seg.py \
+  --input_asr_json examples/sample_asr.json \
+  --output_json output.json \
+  --no_llm
+
+# With LLM
+export ANTHROPIC_API_KEY=sk-ant-...
+python standalone_utterance_seg.py \
+  --input_asr_json data/session.json \
+  --output_json output/utterances.json \
+  --few_shot_examples examples/few_shot_boundaries.json
+```
+
+**Features:**
+- ✅ Single file (730 lines) - no package installation needed
+- ✅ CPU only - works on any machine
+- ✅ Minimal dependencies: `pydantic` and `anthropic` (optional)
+- ✅ Same functionality as full package
+- ✅ Perfect for HPC clusters, quick deployments, or portability
+
+**Install minimal dependencies:**
+```bash
+pip install pydantic anthropic  # anthropic only needed for LLM mode
+```
+
+The standalone script is available in both the root directory and `hpc/` directory.
+
+## Usage (Installed Package)
 
 ### Basic Usage (with LLM)
 
@@ -149,24 +182,30 @@ All 96 tests passing!
 ## Project Structure
 
 ```
-src/utterance_segmentation/
-  ├── models.py          # Core data structures (Word, Turn, Utterance, etc.)
-  ├── io.py              # I/O helpers for ASR JSON
-  ├── turns.py           # Turn construction from speaker/pauses
-  ├── spans.py           # Candidate span generation (40-80 words)
-  ├── llm_boundaries.py  # LLM boundary classification (Claude API)
-  ├── utterances.py      # Final utterance construction
-  └── cli.py             # Command-line interface
+standalone_utterance_seg.py  # 🌟 Single-file standalone version (730 lines, CPU-only)
 
-tests/                   # Comprehensive unit tests (96 tests)
-examples/                # Sample data files
-hpc/                     # HPC/SLURM batch processing scripts
-  ├── environment.yml    # Conda environment
-  ├── setup_hpc.sh       # Setup script
-  ├── run_slurm.sh       # Single file job
-  ├── run_slurm_batch.sh # Batch processing
-  ├── run_no_llm.sh      # Fast mode
-  └── README_HPC.md      # HPC usage guide
+src/utterance_segmentation/  # Full package version
+  ├── models.py              # Core data structures (Word, Turn, Utterance, etc.)
+  ├── io.py                  # I/O helpers for ASR JSON
+  ├── turns.py               # Turn construction from speaker/pauses
+  ├── spans.py               # Candidate span generation (40-80 words)
+  ├── llm_boundaries.py      # LLM boundary classification (Claude API)
+  ├── utterances.py          # Final utterance construction
+  └── cli.py                 # Command-line interface
+
+tests/                       # Comprehensive unit tests (96 tests)
+examples/                    # Sample data files
+  ├── sample_asr.json        # Sample ASR input
+  └── few_shot_boundaries.json  # Example boundaries for LLM
+
+hpc/                         # HPC/SLURM batch processing scripts
+  ├── standalone_utterance_seg.py  # Standalone script copy
+  ├── environment.yml        # Conda environment
+  ├── setup_hpc.sh           # Setup script
+  ├── run_slurm.sh           # Single file job
+  ├── run_slurm_batch.sh     # Batch processing
+  ├── run_no_llm.sh          # Fast mode
+  └── README_HPC.md          # HPC usage guide
 ```
 
 ## Development Phases

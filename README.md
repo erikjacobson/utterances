@@ -109,6 +109,34 @@ ASR JSON must follow WhisperX-style format:
 }
 ```
 
+## Running on HPC (SLURM)
+
+For batch processing on HPC systems (Indiana University's Carbonate, Big Red 200, etc.), see **[HPC Documentation](hpc/README_HPC.md)**.
+
+Quick start:
+```bash
+# Setup conda environment
+cd hpc
+bash setup_hpc.sh
+
+# Submit single job
+sbatch run_slurm.sh
+
+# Submit batch processing (multiple files)
+sbatch run_slurm_batch.sh
+
+# Fast processing without LLM
+sbatch run_no_llm.sh
+```
+
+The `hpc/` directory includes:
+- `environment.yml` - Conda environment specification
+- `setup_hpc.sh` - Automated setup script
+- `run_slurm.sh` - Single file SLURM job
+- `run_slurm_batch.sh` - Batch processing with job arrays
+- `run_no_llm.sh` - Fast processing without LLM
+- `README_HPC.md` - Comprehensive HPC usage guide
+
 ## Testing
 
 Run all tests:
@@ -132,6 +160,13 @@ src/utterance_segmentation/
 
 tests/                   # Comprehensive unit tests (96 tests)
 examples/                # Sample data files
+hpc/                     # HPC/SLURM batch processing scripts
+  ├── environment.yml    # Conda environment
+  ├── setup_hpc.sh       # Setup script
+  ├── run_slurm.sh       # Single file job
+  ├── run_slurm_batch.sh # Batch processing
+  ├── run_no_llm.sh      # Fast mode
+  └── README_HPC.md      # HPC usage guide
 ```
 
 ## Development Phases

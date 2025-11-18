@@ -1,0 +1,12 @@
+name: utterance-seg
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.11
+  - pip
+  - pip:
+    - pydantic>=2.0.0
+    - anthropic>=0.18.0
+    - pytest>=7.0.0
+    - pytest-cov>=4.0.0
